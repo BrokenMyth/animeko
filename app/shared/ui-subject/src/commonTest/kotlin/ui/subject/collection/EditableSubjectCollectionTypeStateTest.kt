@@ -13,32 +13,29 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class EditableSubjectCollectionTypeStateTest {
     @Test
-    fun completedCollectionSurvivesDecliningTheEpisodePrompt() = runTest {
+    fun completedCollectionDoesNotOfferAnEpisodePrompt() = runTest {
         val collection = MutableStateFlow(UnifiedCollectionType.DOING)
         var markedEpisodes = false
         val state = EditableSubjectCollectionTypeState(collection, { true }, { collection.value = it },
             { markedEpisodes = true }, backgroundScope)
         assertNull(state.setSelfCollectionType(UnifiedCollectionType.DONE))
-        assertTrue(state.shouldOfferMarkAllWatched)
-        state.dismissSetAllEpisodesDoneDialog()
         assertEquals(UnifiedCollectionType.DONE, collection.value)
         assertFalse(markedEpisodes)
         assertFalse(state.shouldOfferMarkAllWatched)
     }
 
     @Test
-    fun markAllFailureKeepsThePromptAvailableForRetry() = runTest {
+    fun explicitMarkAllCanRetryWithoutAnEpisodePrompt() = runTest {
         val collection = MutableStateFlow(UnifiedCollectionType.DOING)
         var attempts = 0
         val state = EditableSubjectCollectionTypeState(collection, { true }, { collection.value = it },
             { if (++attempts == 1) error("offline") }, backgroundScope)
         assertNull(state.setSelfCollectionType(UnifiedCollectionType.DONE))
         assertNotNull(state.setAllEpisodesWatchedAwait())
-        assertTrue(state.shouldOfferMarkAllWatched)
+        assertFalse(state.shouldOfferMarkAllWatched)
         assertNull(state.setAllEpisodesWatchedAwait())
         assertEquals(2, attempts)
         assertEquals(UnifiedCollectionType.DONE, collection.value)

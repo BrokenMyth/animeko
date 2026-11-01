@@ -44,3 +44,6 @@ kls_database.db
 /app/ios/12.4.0
 /app/ios/xcb2.log
 /app/ios/xcodebuild.log
+
+# Private watched-date seed bundled only into local builds
+/app/shared/app-data/src/commonMain/composeResources/files/local-watched-dates.json

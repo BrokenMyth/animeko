@@ -927,6 +927,12 @@
     <string name="subject_collection_syncing">正在同步</string>
     <string name="subject_collection_page_title">追番</string>
     <string name="subject_collection_move_to_watched">移至"看過"</string>
+    <string name="watched_date_edit">設定看過時間</string>
+    <string name="watched_date_label">看過日期</string>
+    <string name="watched_date_format">以 YYYY-MM-DD 格式填寫日期</string>
+    <string name="watched_date_invalid">請輸入有效日期，格式為 YYYY-MM-DD</string>
+    <string name="watched_date_save">儲存</string>
+    <string name="watched_date_clear">清除日期</string>
     <string name="subject_collection_uncollected">未收藏</string>
     <string name="subject_collection_guest_mode_tip">遊客模式下請先搜尋後觀看，或登入後使用收藏功能</string>
     <string name="subject_details_collection_summary">%1$s 收藏 / %2$s 在看</string>
@@ -1931,6 +1937,14 @@
     <string name="settings_mediasource_jsonapi_unknown_variables">未知變量：%1$s</string>
     <string name="settings_mediasource_jsonapi_play_open_video">打開視頻地址</string>
     <string name="settings_mediasource_jsonapi_play_copy">複製</string>
+    <string name="exploration_refresh_recommendations">重新整理推薦</string>
+    <string name="settings_app_recommendations">推薦</string>
+    <string name="settings_app_hide_collected_recommendations">推薦中不顯示已標記的動畫</string>
+    <string name="settings_app_hide_collected_recommendations_description">隱藏已標記為想看、在看、看過、擱置或拋棄的動畫</string>
+    <string name="collection_sort">排序</string>
+    <string name="collection_sort_default">預設排序</string>
+    <string name="collection_sort_watched_newest">最近看過（日期降序）</string>
+    <string name="collection_sort_watched_oldest">最早看過（日期升序）</string>
 </resources>
 
 <!--@formatter:on-->

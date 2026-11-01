@@ -25,6 +25,10 @@ class SetSubjectCollectionTypeOrDeleteUseCaseImpl(
 ) : SetSubjectCollectionTypeOrDeleteUseCase {
     override suspend fun invoke(subjectId: Int, collectionType: UnifiedCollectionType?) {
         subjectRepository.setSubjectCollectionTypeOrDelete(subjectId, collectionType)
+        // 条目看过状态包含全部剧集的看过进度，剧集仓库负责持久化与同步。
+        if (collectionType == UnifiedCollectionType.DONE) {
+            episodeRepository.setAllEpisodesWatched(subjectId)
+        }
         if (collectionType != UnifiedCollectionType.DOING) {
             episodeRepository.subjectEpisodeCollectionInfosFlow(subjectId).first().forEach {
                 danmakuRepository.deleteDanmakuIfDontNeeded(subjectId, it.episodeId)

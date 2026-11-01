@@ -14,6 +14,7 @@ import androidx.paging.cachedIn
 import androidx.paging.compose.launchAsLazyPagingItemsIn
 import androidx.paging.filter
 import androidx.paging.flatMap
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -22,7 +23,9 @@ import me.him188.ani.app.data.models.subject.subjectInfo
 import me.him188.ani.app.data.network.RecommendationRepository
 import me.him188.ani.app.data.network.TrendsRepository
 import me.him188.ani.app.data.repository.subject.FollowedSubjectsRepository
+import me.him188.ani.app.data.repository.subject.SetSubjectCollectionTypeOrDeleteUseCase
 import me.him188.ani.app.data.repository.user.SettingsRepository
+import me.him188.ani.app.domain.foundation.LoadError
 import me.him188.ani.app.domain.session.SessionManager
 import me.him188.ani.app.domain.usecase.GlobalKoin
 import me.him188.ani.app.ui.foundation.AbstractViewModel
@@ -39,6 +42,7 @@ open class ExplorationPageViewModel(private val koin: Koin = GlobalKoin) : Abstr
     private val sessionManager: SessionManager by inject()
     private val followedSubjectsRepository: FollowedSubjectsRepository by inject()
     private val settingsRepository: SettingsRepository by inject()
+    private val setSubjectCollectionType: SetSubjectCollectionTypeOrDeleteUseCase by inject()
 
     private val nsfwSettingFlow = settingsRepository.uiSettings.flow.map { it.searchSettings.nsfwMode }
     private val horizontalScrollTipFlow =
@@ -67,6 +71,14 @@ open class ExplorationPageViewModel(private val koin: Koin = GlobalKoin) : Abstr
         }.cachedIn(backgroundScope),
         recommendationPager = recommendationRepository.recommendedSubjectsPager().cachedIn(backgroundScope),
         horizontalScrollTipFlow = horizontalScrollTipFlow,
+        onSetCollectionType = { subjectId, type ->
+            // 收藏和全部剧集状态写入由页面模型持有，避免卡片离开列表时中断。
+            backgroundScope.async {
+                LoadError.runAndWrapOrThrowCancellation {
+                    setSubjectCollectionType(subjectId, type)
+                }
+            }.await()
+        },
         onSetDisableHorizontalScrollTip = {
             backgroundScope.launch {
                 settingsRepository.oneshotActionConfig.update { copy(horizontalScrollTip = false) }

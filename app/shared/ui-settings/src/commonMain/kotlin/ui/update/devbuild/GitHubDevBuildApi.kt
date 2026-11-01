@@ -25,6 +25,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.him188.ani.app.tools.update.downloadToFile
+import me.him188.ani.app.ui.update.ForkUpdateRepository
 import me.him188.ani.utils.io.SystemPath
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
@@ -209,7 +210,7 @@ class GitHubDevBuildApi(
     private fun HttpStatusCode.isSuccess(): Boolean = value in 200..299
 
     companion object {
-        const val DEFAULT_REPOSITORY = "open-ani/animeko"
+        const val DEFAULT_REPOSITORY = ForkUpdateRepository.NAME
         const val DEFAULT_BRANCH = "main"
         const val DEFAULT_WORKFLOW_FILE_NAME = "build.yml"
 

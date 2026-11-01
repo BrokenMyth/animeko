@@ -18,7 +18,9 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.RawQuery
 import androidx.room.Relation
+import androidx.room.RoomRawQuery
 import androidx.room.Transaction
 import androidx.room.TypeConverters
 import androidx.room.Upsert
@@ -154,6 +156,25 @@ interface SubjectCollectionDao {
     @Transaction
     suspend fun upsert(item: List<SubjectCollectionEntity>)
 
+    @Upsert
+    suspend fun upsertSnapshotEpisodes(items: List<EpisodeCollectionEntity>)
+
+    @Query(REAPPLY_PENDING_EPISODE_COLLECTION_TYPES)
+    suspend fun reapplyPendingSnapshotEpisodeTypes()
+
+    /** 完整收藏快照与剧集在同一个事务中替换，分页观察者不会看到中间的空列表。 */
+    @Transaction
+    suspend fun replaceCollectionSnapshot(
+        type: UnifiedCollectionType,
+        subjects: List<SubjectCollectionEntity>,
+        episodes: List<EpisodeCollectionEntity>,
+    ) {
+        deleteAll(type)
+        upsert(subjects)
+        upsertSnapshotEpisodes(episodes)
+        reapplyPendingSnapshotEpisodeTypes()
+    }
+
     @Query("""UPDATE subject_collection SET collectionType = :collectionType, lastUpdated = :lastUpdated WHERE subjectId = :subjectId""")
     suspend fun updateType(
         subjectId: Int,
@@ -268,6 +289,10 @@ interface SubjectCollectionDao {
         includeNsfw: Boolean,
     ): PagingSource<Int, SubjectCollectionAndEpisodes>
 
+    @RawQuery(observedEntities = [SubjectCollectionEntity::class, EpisodeCollectionEntity::class])
+    @Transaction
+    fun filterSortedCollectionsPaging(query: RoomRawQuery): PagingSource<Int, SubjectCollectionAndEpisodes>
+
     @Query("""SELECT * FROM subject_collection WHERE subjectId = :subjectId""")
     fun findById(subjectId: Int): Flow<SubjectCollectionEntity?>
 
@@ -332,6 +357,12 @@ interface SubjectCollectionDao {
      */
     @Query("""SELECT COUNT(*) FROM subject_collection WHERE (collectionType is NOT NULL AND (:collectionType IS NULL OR collectionType = :collectionType))""")
     fun countCollected(collectionType: UnifiedCollectionType?): Flow<Int>
+
+    /** 本地已缓存且具有收藏状态的条目, 可在网络不可用时用于推荐过滤. */
+    @Query("""SELECT subjectId FROM subject_collection WHERE collectionType != :notCollected""")
+    fun collectedSubjectIds(
+        notCollected: UnifiedCollectionType = UnifiedCollectionType.NOT_COLLECTED,
+    ): Flow<List<Int>>
 
     @Query("""UPDATE subject_collection SET cachedStaffUpdated = :time, cachedCharactersUpdated = :time WHERE subjectId = :subjectId""")
     suspend fun updateCachedRelationsUpdated(subjectId: Int, time: Long = currentTimeMillis())

@@ -45,6 +45,7 @@ data class UISettings(
     ) val theme: LegacyThemeSettings? = null,
     val myCollections: MyCollectionsSettings = MyCollectionsSettings.Default,
     val searchSettings: SearchSettings = SearchSettings.Default,
+    val recommendationSettings: RecommendationSettings = RecommendationSettings.Default,
     val episodeProgress: EpisodeProgressSettings = EpisodeProgressSettings.Default,
     val subjectAppearance: SubjectAppearanceSettings = SubjectAppearanceSettings.Default,
     val desktopCloseBehavior: DesktopCloseBehavior = DesktopCloseBehavior.EXIT,
@@ -130,6 +131,18 @@ data class SearchSettings(
     companion object {
         @Stable
         val Default = SearchSettings()
+    }
+}
+
+@Serializable
+@Immutable
+data class RecommendationSettings(
+    /** 推荐中隐藏任何已收藏的条目, 包括想看、在看、看过、搁置与抛弃. */
+    val hideCollectedSubjects: Boolean = true,
+) {
+    companion object {
+        @Stable
+        val Default = RecommendationSettings()
     }
 }
 

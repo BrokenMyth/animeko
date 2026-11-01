@@ -9,9 +9,12 @@
 
 package me.him188.ani.app.ui.subject.collection.components
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +44,7 @@ fun EditCollectionTypeDropDown(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    onEditWatchedDate: (() -> Unit)? = null,
 ) {
     val presentation by state.presentationFlow.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -59,12 +63,13 @@ fun EditCollectionTypeDropDown(
             }
         },
         modifier = modifier,
+        onEditWatchedDate = onEditWatchedDate,
     )
 }
 
 /**
  * A drop down menu to edit the collection type of a subject.
- * Also includes a dialog to set all episodes as watched when the user attempts to mark the subject as [UnifiedCollectionType.DONE].
+ * Watched-date editing is available when the caller supplies an action.
  */
 @Composable
 fun EditCollectionTypeDropDown(
@@ -75,6 +80,7 @@ fun EditCollectionTypeDropDown(
     modifier: Modifier = Modifier,
     actions: List<SubjectCollectionAction> = SubjectCollectionActionsForEdit,
     showDelete: Boolean = currentType != UnifiedCollectionType.NOT_COLLECTED,
+    onEditWatchedDate: (() -> Unit)? = null,
 ) {
     var showConfirmDeleteDialog by rememberSaveable { mutableStateOf(false) }
     DropdownMenu(
@@ -105,6 +111,17 @@ fun EditCollectionTypeDropDown(
                         onClick(action)
                         onDismissRequest()
                     }
+                },
+            )
+        }
+
+        if (onEditWatchedDate != null) {
+            DropdownMenuItem(
+                text = { Text(stringResource(Lang.watched_date_edit)) },
+                leadingIcon = { Icon(Icons.Outlined.DateRange, null) },
+                onClick = {
+                    onDismissRequest()
+                    onEditWatchedDate()
                 },
             )
         }

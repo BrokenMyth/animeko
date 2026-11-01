@@ -24,6 +24,7 @@ import me.him188.ani.app.data.repository.media.MediaSourceSaves
 import me.him188.ani.app.data.repository.media.MediaSourceSubscriptionsSaveData
 import me.him188.ani.app.data.repository.media.MikanIndexes
 import me.him188.ani.app.data.repository.player.EpisodeHistories
+import me.him188.ani.app.data.repository.subject.WatchedDates
 import me.him188.ani.app.data.repository.torrent.peer.PeerFilterSubscriptionsSaveData
 import me.him188.ani.app.data.repository.user.TokenSave
 import me.him188.ani.app.domain.featureflag.FeatureFlagSnapshot
@@ -34,6 +35,15 @@ import me.him188.ani.utils.io.SystemPath
 
 // 一个对象, 可都写到 common 里, 不用每个 store 都 expect/actual
 abstract class PlatformDataStoreManager {
+    /** 本地看过日期，不参与收藏缓存失效或云端设置备份。 */
+    val watchedDateStore by lazy {
+        DataStoreFactory.create(
+            serializer = WatchedDates.serializer().asDataStoreSerializer({ WatchedDates.Empty }),
+            produceFile = { resolveDataStoreFile("watchedDates") },
+            corruptionHandler = ReplaceFileCorruptionHandler { WatchedDates.Empty },
+        )
+    }
+
     val mikanIndexStore: DataStore<MikanIndexes>
         get() = DataStoreFactory.create(
             serializer = MikanIndexes.serializer().asDataStoreSerializer({ MikanIndexes.Empty }),

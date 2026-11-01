@@ -10,6 +10,7 @@
 package me.him188.ani.app.domain.episode
 
 import me.him188.ani.app.data.network.SubjectService
+import me.him188.ani.app.data.network.RecommendationCollectionFilter
 import me.him188.ani.app.data.models.subject.preferredDisplayName as subjectPreferredDisplayName
 import me.him188.ani.app.domain.usecase.UseCase
 import me.him188.ani.utils.platform.Uuid
@@ -42,18 +43,24 @@ fun interface GetSubjectRecommendationUseCase : UseCase {
     suspend operator fun invoke(subjectId: Int): List<SubjectRecommendation>
 }
 
-class GetSubjectRecommendationUseCaseImpl(private val service: SubjectService) : GetSubjectRecommendationUseCase {
+class GetSubjectRecommendationUseCaseImpl(
+    private val service: SubjectService,
+    private val collectionFilter: RecommendationCollectionFilter,
+) : GetSubjectRecommendationUseCase {
     override suspend fun invoke(subjectId: Int): List<SubjectRecommendation> {
-        return service.getSubjectRecommendations(subjectId, 15).map {
-            SubjectRecommendation(
-                subjectId = it.subjectId,
-                name = it.subjectName,
-                nameCn = it.subjectNameCn,
-                desc1 = it.desc1,
-                desc2 = it.desc2,
-                imageUrl = it.imageUrl,
-                uri = it.uri,
-            )
-        }
+        val excludedIds = collectionFilter.excludedSubjectIds()
+        return service.getSubjectRecommendations(subjectId, 15)
+            .filter { it.subjectId?.toInt() !in excludedIds }
+            .map {
+                SubjectRecommendation(
+                    subjectId = it.subjectId,
+                    name = it.subjectName,
+                    nameCn = it.subjectNameCn,
+                    desc1 = it.desc1,
+                    desc2 = it.desc2,
+                    imageUrl = it.imageUrl,
+                    uri = it.uri,
+                )
+            }
     }
 }

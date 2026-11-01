@@ -394,10 +394,16 @@ class SubjectCollectionRepositoryImpl(
                 initialKey = 0,
                 remoteMediator = SubjectCollectionRemoteMediator(query),
                 pagingSourceFactory = {
-                    subjectCollectionDao.filterByCollectionTypePaging(
-                        query.type,
-                        includeNsfw = nsfwModeSettings != NsfwMode.HIDE,
-                    )
+                    if (query.isWatchedDateSorted) {
+                        subjectCollectionDao.filterSortedCollectionsPaging(
+                            query.watchedDatePagingQuery(includeNsfw = nsfwModeSettings != NsfwMode.HIDE),
+                        )
+                    } else {
+                        subjectCollectionDao.filterByCollectionTypePaging(
+                            query.type,
+                            includeNsfw = nsfwModeSettings != NsfwMode.HIDE,
+                        )
+                    }
                 },
             ).flow.map { data ->
                 data.map { (entity, episodesOfAnyType) ->
@@ -521,6 +527,8 @@ class SubjectCollectionRepositoryImpl(
         private val query: CollectionsFilterQuery,
     ) : RemoteMediator<Int, T>() {
         override suspend fun initialize(): InitializeAction = withContext(defaultDispatcher) {
+            // 日期排序的分页顺序与服务端不同，普通分页缓存不能证明全部收藏已下载。
+            if (query.isWatchedDateSorted) return@withContext InitializeAction.LAUNCH_INITIAL_REFRESH
             val lastUpdated = subjectCollectionDao.lastFetched(query.type)
             if ((currentTimeMillis() - lastUpdated).milliseconds > cacheExpiry) {
                 InitializeAction.LAUNCH_INITIAL_REFRESH
@@ -534,6 +542,10 @@ class SubjectCollectionRepositoryImpl(
             state: PagingState<Int, T>,
         ): MediatorResult = try {
             withContext(defaultDispatcher) {
+                if (query.isWatchedDateSorted) {
+                    if (loadType == LoadType.REFRESH) refreshCompleteSubjectCollections(checkNotNull(query.type))
+                    return@withContext MediatorResult.Success(endOfPaginationReached = true)
+                }
                 val (offset, limit) = calculateIndexBasedLoadInfo(loadType, state)
                     ?: return@withContext MediatorResult.Success(endOfPaginationReached = true)
                 logger.debug { "${loadType}, Loading $offset, limit=$limit" }
@@ -561,6 +573,30 @@ class SubjectCollectionRepositoryImpl(
         } catch (e: Exception) {
             MediatorResult.Error(RepositoryException.wrapOrThrowCancellation(e))
         }
+    }
+
+    /** 先取齐全部服务端分页再替换缓存；网络失败时仍可浏览原有本地收藏。 */
+    private suspend fun refreshCompleteSubjectCollections(type: UnifiedCollectionType) {
+        val collections = mutableListOf<AniSubjectCollection>()
+        val seenIds = mutableSetOf<Long>()
+        val pageSize = 100
+        var offset = 0
+        do {
+            val page = subjectService.getSubjectCollections(type.toAniSubjectCollectionType(), offset, pageSize)
+            val added = page.filter { seenIds.add(it.id) }
+            check(page.isEmpty() || added.isNotEmpty()) { "Collection pagination did not advance" }
+            collections += added
+            offset += page.size
+        } while (page.size >= pageSize)
+
+        val lastFetched = currentTimeMillis()
+        subjectCollectionDao.replaceCollectionSnapshot(
+            type = type,
+            subjects = collections.map { it.toEntity(lastFetched = lastFetched) },
+            episodes = collections.flatMap { collection ->
+                collection.episodes.map { it.toEntity1(it.subjectId.toInt(), lastFetched) }
+            },
+        )
     }
 
     override suspend fun setSubjectCollectionTypeOrDelete(
@@ -700,6 +736,8 @@ class SubjectCollectionRepositoryImpl(
 
 data class CollectionsFilterQuery(
     val type: UnifiedCollectionType?,
+    val sortOrder: CollectionSortOrder = CollectionSortOrder.DEFAULT,
+    val watchedDates: Map<Int, String> = emptyMap(),
 ) {
     companion object {
         val Empty = CollectionsFilterQuery(null)

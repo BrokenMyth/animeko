@@ -127,3 +127,20 @@ UI 位于 `ui/subject/relations`：窄屏为纵向时间线，宽屏为横向的
 
 Ani
 的条目系统暂未考虑上述类型，但这在近期计划中 [#492](https://github.com/open-ani/animeko/issues/492)。
+
+## 本地看过日期
+
+`WatchedDateRepository` 在独立的 `watchedDates` DataStore 中按账号 ID 和条目 ID 保存 `YYYY-MM-DD` 日期。
+只有“看过”列表显示已填写的日期；卡片日期与菜单的“设置看过时间”共用 `WatchedDateDialog`，支持日历选择、切换手动输入和清除。
+标记看过不会自动填写日期，清空收藏缓存或改变收藏状态也不会清除手动日期。
+
+本地构建可在 `app/shared/app-data/src/commonMain/composeResources/files/local-watched-dates.json` 提供一次性导入资源。
+此文件受 Git 忽略，格式为 `{"seedId":"batch-id","userId":"account-id","dates":{"123":"2024-01-01"}}`。
+Android 和 Desktop 均通过 Compose 资源读取；只为匹配的账号导入有效日期，保留已有日期，并记录批次以保留用户后续的修改和清除操作。
+不包含此资源的构建仍支持手动填写日期。
+
+TODO：看过日期的云存档与多设备同步；当前只保存在各设备本地，不参与云端设置备份。
+
+看过列表的排序菜单支持默认顺序、日期升序和日期降序，未填写日期的条目始终排在最后，同日按收藏更新时间和条目 ID 稳定排列。
+日期排序先完整获取该类型收藏，再使用日期快照生成的 SQL 排名进行本地分页；排序覆盖全部条目，日期修改会更新当前排序。
+日期选择器使用 UTC 零点表示日历日期，存储值不受设备时区影响。

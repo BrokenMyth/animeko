@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.map
 import me.him188.ani.app.data.network.AniApiProvider
 import me.him188.ani.app.data.network.AutoSkipRepository
+import me.him188.ani.app.data.network.RecommendationCollectionFilter
 import me.him188.ani.app.data.network.RecommendationRepository
 import me.him188.ani.app.data.network.TrendsRepository
 import me.him188.ani.app.data.persistent.dataStores
@@ -56,6 +57,7 @@ import me.him188.ani.app.data.repository.subject.SubjectRelationsRepository
 import me.him188.ani.app.data.repository.subject.SubjectSearchCompletionRepository
 import me.him188.ani.app.data.repository.subject.SubjectSearchHistoryRepository
 import me.him188.ani.app.data.repository.subject.SubjectSearchRepository
+import me.him188.ani.app.data.repository.subject.WatchedDateRepository
 import me.him188.ani.app.data.repository.torrent.peer.PeerFilterSubscriptionRepository
 import me.him188.ani.app.data.repository.user.DefaultDeveloperVerificationRepository
 import me.him188.ani.app.data.repository.user.DefaultQrLoginRepository
@@ -122,6 +124,13 @@ fun KoinApplication.repositoryModules(
     }
 
     single<TokenRepository> { TokenRepository(getContext().dataStores.tokenStore) }
+
+    single<WatchedDateRepository> {
+        WatchedDateRepository(
+            store = getContext().dataStores.watchedDateStore,
+            currentUserId = get<UserRepository>().selfInfoFlow.map { it?.id?.toString() },
+        )
+    }
 
     single<EpisodePreferencesRepository> {
         EpisodePreferencesRepositoryImpl(
@@ -263,7 +272,8 @@ fun KoinApplication.repositoryModules(
 
     single<TrendsRepository> { TrendsRepository(get<AniApiProvider>().trendsApi) }
 
-    single<RecommendationRepository> { RecommendationRepository(get<AniApiProvider>().homeApi) }
+    single { RecommendationCollectionFilter(get(), get(), database.subjectCollection(), get(), get()) }
+    single<RecommendationRepository> { RecommendationRepository(get<AniApiProvider>().homeApi, get()) }
 
     single<AutoSkipRepository> { AutoSkipRepository(get<AniApiProvider>().episodesApi) }
 

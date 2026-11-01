@@ -924,6 +924,12 @@
     <string name="subject_collection_syncing">Syncing</string>
     <string name="subject_collection_page_title">Following</string>
     <string name="subject_collection_move_to_watched">Move to "Watched"</string>
+    <string name="watched_date_edit">Set watched date</string>
+    <string name="watched_date_label">Watched date</string>
+    <string name="watched_date_format">Enter a date as YYYY-MM-DD</string>
+    <string name="watched_date_invalid">Enter a valid date as YYYY-MM-DD</string>
+    <string name="watched_date_save">Save</string>
+    <string name="watched_date_clear">Clear date</string>
     <string name="subject_collection_uncollected">Uncollected</string>
     <string name="subject_collection_guest_mode_tip">In guest mode, please search and watch directly, or sign in to use the collection feature.</string>
     <string name="subject_details_collection_summary">%1$s follows / %2$s watching</string>
@@ -1928,6 +1934,14 @@
     <string name="settings_mediasource_jsonapi_unknown_variables">Unknown variables: %1$s</string>
     <string name="settings_mediasource_jsonapi_play_open_video">Open video URL</string>
     <string name="settings_mediasource_jsonapi_play_copy">Copy</string>
+    <string name="exploration_refresh_recommendations">Refresh recommendations</string>
+    <string name="settings_app_recommendations">Recommendations</string>
+    <string name="settings_app_hide_collected_recommendations">Hide collected anime in recommendations</string>
+    <string name="settings_app_hide_collected_recommendations_description">Hide anime marked as planned, watching, watched, on hold or dropped</string>
+    <string name="collection_sort">Sort</string>
+    <string name="collection_sort_default">Default order</string>
+    <string name="collection_sort_watched_newest">Watched date: newest first</string>
+    <string name="collection_sort_watched_oldest">Watched date: oldest first</string>
 </resources>
 
 <!--@formatter:on-->

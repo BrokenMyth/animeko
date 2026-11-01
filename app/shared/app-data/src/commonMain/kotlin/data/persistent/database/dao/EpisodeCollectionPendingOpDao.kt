@@ -20,6 +20,16 @@ import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 import me.him188.ani.datasources.api.topic.UnifiedCollectionType
 
+/** 服务端缓存写入后，以尚未同步的本地操作为准恢复剧集看过状态。 */
+internal const val REAPPLY_PENDING_EPISODE_COLLECTION_TYPES = """
+    UPDATE episode_collection SET selfCollectionType = (
+        SELECT p.collectionType FROM episode_collection_pending_op p
+        WHERE p.episodeId = episode_collection.episodeId
+        ORDER BY p.id DESC LIMIT 1
+    )
+    WHERE episodeId IN (SELECT episodeId FROM episode_collection_pending_op)
+"""
+
 /**
  * 剧集收藏状态的本地待同步操作 (outbox). 用户改了剧集看过状态先写本地, 再由 syncer 推到服务端.
  *

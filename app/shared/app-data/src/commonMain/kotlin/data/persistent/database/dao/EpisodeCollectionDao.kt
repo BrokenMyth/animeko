@@ -189,16 +189,7 @@ interface EpisodeCollectionDao {
         reapplyPendingCollectionTypes()
     }
 
-    @Query(
-        """
-        UPDATE episode_collection SET selfCollectionType = (
-            SELECT p.collectionType FROM episode_collection_pending_op p
-            WHERE p.episodeId = episode_collection.episodeId
-            ORDER BY p.id DESC LIMIT 1
-        )
-        WHERE episodeId IN (SELECT episodeId FROM episode_collection_pending_op)
-        """,
-    )
+    @Query(REAPPLY_PENDING_EPISODE_COLLECTION_TYPES)
     suspend fun reapplyPendingCollectionTypes()
 
     @Query("""UPDATE episode_collection SET selfCollectionType = :type WHERE subjectId = :subjectId AND episodeId = :episodeId""")

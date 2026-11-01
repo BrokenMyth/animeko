@@ -174,9 +174,24 @@ class EpisodeCollectionRepository(
      * 设置指定条目的所有剧集为已看. 先写本地并入队, 由 [EpisodeCollectionSyncer] 推到服务端.
      */
     suspend fun setAllEpisodesWatched(subjectId: Int) = withContext(defaultDispatcher) {
-        // 优先用本地缓存, 离线也能标; 缓存为空 (还没打开过条目) 才走会拉网络的流.
-        val episodeIds = episodeCollectionDao.listIdBySubjectId(subjectId).first().ifEmpty {
-            subjectEpisodeCollectionInfosFlow(subjectId).first().map { it.episodeId }
+        val cachedIds = episodeCollectionDao.listIdBySubjectId(subjectId).first()
+        val remoteEpisodes = try {
+            loadAllEpisodeCollections(subjectId)
+        } catch (e: Exception) {
+            val error = RepositoryException.wrapOrThrowCancellation(e)
+            if (cachedIds.isEmpty()) throw error
+            logger.warn(error) { "Using cached episodes to mark subject $subjectId watched" }
+            null
+        }
+        val episodeIds = if (remoteEpisodes != null) {
+            if (subjectDao.findById(subjectId).first() == null) {
+                // 剧集表有条目外键，首次操作时先确保条目已缓存。
+                subjectCollectionRepository.subjectCollectionFlow(subjectId).first()
+            }
+            episodeCollectionDao.upsert(remoteEpisodes.map { it.toEntity(subjectId) })
+            remoteEpisodes.map { it.episodeId }.distinct()
+        } else {
+            cachedIds
         }
         if (episodeIds.isEmpty()) return@withContext
 
@@ -193,6 +208,18 @@ class EpisodeCollectionRepository(
             },
         )
         onDirtyChanged()
+    }
+
+    /** 完整获取剧集，不使用界面上的类型过滤或可能仅包含部分剧集的缓存。 */
+    private suspend fun loadAllEpisodeCollections(subjectId: Int): List<EpisodeCollectionInfo> {
+        val episodes = mutableListOf<EpisodeCollectionInfo>()
+        var offset = 0
+        do {
+            val page = episodeService.getEpisodeCollectionInfosPaged(subjectId, offset = offset, limit = 100)
+            episodes += page.page
+            offset += page.page.size
+        } while (page.hasMore && page.page.isNotEmpty())
+        return episodes.distinctBy { it.episodeId }
     }
 
     /**

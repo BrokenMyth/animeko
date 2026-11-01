@@ -19,6 +19,9 @@ import androidx.compose.material3.adaptive.WindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -36,6 +39,7 @@ import me.him188.ani.app.domain.foundation.LoadError
 import me.him188.ani.app.ui.foundation.LocalSubjectAppearanceSettings
 import me.him188.ani.app.ui.foundation.ProvideCompositionLocalsForPreview
 import me.him188.ani.app.ui.foundation.animation.LocalAniMotionScheme
+import me.him188.ani.app.ui.foundation.interaction.onRightClickIfSupported
 import me.him188.ani.app.ui.foundation.layout.CarouselItemDefaults
 import me.him188.ani.app.ui.foundation.layout.currentWindowAdaptiveInfo1
 import me.him188.ani.app.ui.foundation.layout.minimumHairlineSize
@@ -45,6 +49,8 @@ import me.him188.ani.app.ui.search.rememberLoadErrorState
 import me.him188.ani.app.ui.subject.SubjectCoverCard
 import me.him188.ani.app.ui.subject.SubjectGridDefaults
 import me.him188.ani.app.ui.subject.SubjectGridLayoutParams
+import me.him188.ani.app.ui.subject.collection.components.EditCollectionTypeDropDown
+import me.him188.ani.datasources.api.topic.UnifiedCollectionType
 import me.him188.ani.utils.platform.annotations.TestOnly
 
 fun LazyGridScope.recommendationItems(
@@ -52,6 +58,7 @@ fun LazyGridScope.recommendationItems(
     loadError: LoadError?,
     onClick: (RecommendedItemInfo) -> Unit,
     layoutParams: RecommendationLayoutParams,
+    onSetCollectionType: ((RecommendedSubjectInfo, UnifiedCollectionType) -> Unit)? = null,
 ) {
     if (loadError != null) {
         item(span = { GridItemSpan(maxLineSpan) }) {
@@ -85,6 +92,7 @@ fun LazyGridScope.recommendationItems(
                 RecommendedSubjectCard(
                     item = item,
                     onClick = { item?.let { onClick(it) } },
+                    onSetCollectionType = onSetCollectionType,
                     modifier = animateItem,
                     shape = layoutParams.cardShape,
                 )
@@ -97,19 +105,32 @@ fun LazyGridScope.recommendationItems(
 private fun RecommendedSubjectCard(
     item: RecommendedSubjectInfo?, // null means placeholder
     onClick: () -> Unit,
+    onSetCollectionType: ((RecommendedSubjectInfo, UnifiedCollectionType) -> Unit)?,
     shape: Shape = CarouselItemDefaults.shape,
     modifier: Modifier = Modifier,
 ) {
     val useOriginalTitle = LocalSubjectAppearanceSettings.current.useOriginalTitle
-    SubjectCoverCard(
-        name = item?.preferredDisplayName(useOriginalTitle),
-        image = item?.imageLarge,
-        isPlaceholder = item == null,
-        onClick = onClick,
-        modifier = modifier,
-        shape = shape,
-        imageModifier = Modifier.sizeIn(maxWidth = 300.dp, maxHeight = (300f / 9 * 16).dp), // 限制最大宽度, 可以让 iOS 不卡一点
-    )
+    var showCollectionMenu by remember(item?.bangumiId) { mutableStateOf(false) }
+    Box(modifier) {
+        SubjectCoverCard(
+            name = item?.preferredDisplayName(useOriginalTitle),
+            image = item?.imageLarge,
+            isPlaceholder = item == null,
+            onClick = onClick,
+            modifier = Modifier.onRightClickIfSupported(
+                enabled = item != null && onSetCollectionType != null,
+            ) { showCollectionMenu = true },
+            shape = shape,
+            imageModifier = Modifier.sizeIn(maxWidth = 300.dp, maxHeight = (300f / 9 * 16).dp), // 限制最大宽度, 可以让 iOS 不卡一点
+        )
+        EditCollectionTypeDropDown(
+            currentType = null,
+            expanded = showCollectionMenu,
+            onDismissRequest = { showCollectionMenu = false },
+            onClick = { action -> item?.let { onSetCollectionType?.invoke(it, action.type) } },
+            showDelete = false,
+        )
+    }
 }
 
 typealias RecommendationLayoutParams = SubjectGridLayoutParams

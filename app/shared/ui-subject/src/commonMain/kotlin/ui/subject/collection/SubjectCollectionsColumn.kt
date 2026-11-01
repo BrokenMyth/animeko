@@ -185,6 +185,8 @@ fun SubjectCollectionItem(
     height: Dp = SubjectCollectionItemDefaults.height,
     shape: Shape = SubjectCollectionItemDefaults.shape,
     colors: CardColors = CardDefaults.cardColors(),
+    watchedDate: String? = null,
+    onEditWatchedDate: (() -> Unit)? = null,
 ) {
     Card(
         onClick,
@@ -208,6 +210,8 @@ fun SubjectCollectionItem(
                     onShowEpisodeList = onShowEpisodeList,
                     playButton = playButton,
                     Modifier.padding(start = 12.dp).fillMaxSize(),
+                    watchedDate = watchedDate,
+                    onEditWatchedDate = onEditWatchedDate,
                 )
             }
         }
@@ -232,6 +236,8 @@ private fun SubjectCollectionItemContent(
     onShowEpisodeList: () -> Unit,
     playButton: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    watchedDate: String? = null,
+    onEditWatchedDate: (() -> Unit)? = null,
 ) {
     var showEditCollectionTypeMenu by remember { mutableStateOf(false) }
 
@@ -263,6 +269,7 @@ private fun SubjectCollectionItemContent(
                     expanded = showEditCollectionTypeMenu,
                     onDismissRequest = { showEditCollectionTypeMenu = false },
                     modifier = Modifier.testTag(SubjectCollectionItemTestTags.EditCollectionTypeMenu),
+                    onEditWatchedDate = onEditWatchedDate,
                 )
             }
         }
@@ -286,10 +293,19 @@ private fun SubjectCollectionItemContent(
         Row(
             Modifier
                 .padding(vertical = 12.dp)
-                .padding(horizontal = 12.dp)
-                .align(Alignment.End),
+                .padding(end = 12.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (watchedDate != null && onEditWatchedDate != null) {
+                TextButton(
+                    onClick = onEditWatchedDate,
+                    contentPadding = PaddingValues(horizontal = 4.dp),
+                ) {
+                    Text(watchedDate, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.weight(1f))
             TextButton(onShowEpisodeList) {
                 Text(stringResource(Lang.video_player_select_episode))
             }

@@ -308,6 +308,7 @@ class NewVersion(
      */
     val downloadUrlAlternatives: List<String>,
     val publishedAt: String,
+    val releasePageUrl: String = ForkUpdateRepository.releaseUrl(name),
 ) {
     val majorChanges = changelogs.asSequence().flatMap { changelog ->
         changelog.changes.lineSequence()

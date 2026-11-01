@@ -84,11 +84,15 @@ class EpisodeServiceImpl(
             subjectApi.invoke {
                 this.getSubject(subjectId.toLong()).body() // TODO: 2025/6/15 API 不支持 paging 
             }.let { subjectCollection ->
+                // 条目接口一次返回完整剧集清单，不使用 offset/limit 分页。
+                val episodes = subjectCollection.episodes.map {
+                    it.toEntity1(subjectId, lastFetched = currentTimeMillis())
+                        .toEpisodeCollectionInfo()
+                }
                 Paged(
-                    subjectCollection.episodes.map {
-                        it.toEntity1(subjectId, lastFetched = currentTimeMillis())
-                            .toEpisodeCollectionInfo()
-                    },
+                    total = episodes.size,
+                    hasMore = false,
+                    page = episodes,
                 )
             }
 //                .run {

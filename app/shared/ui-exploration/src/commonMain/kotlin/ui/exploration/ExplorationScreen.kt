@@ -30,9 +30,11 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -69,6 +71,7 @@ import me.him188.ani.app.data.models.subject.TestFollowedSubjectInfos
 import me.him188.ani.app.data.models.subject.subjectInfo
 import me.him188.ani.app.data.models.subject.toNavPlaceholder
 import me.him188.ani.app.data.models.trending.TrendingSubjectInfo
+import me.him188.ani.app.domain.foundation.LoadError
 import me.him188.ani.app.navigation.LocalNavigator
 import me.him188.ani.app.navigation.SubjectDetailPlaceholder
 import me.him188.ani.app.ui.adaptive.AniTopAppBar
@@ -98,10 +101,12 @@ import me.him188.ani.app.ui.foundation.session.SelfAvatar
 import me.him188.ani.app.ui.foundation.theme.AniThemeDefaults
 import me.him188.ani.app.ui.foundation.theme.appChromeHazeSource
 import me.him188.ani.app.ui.foundation.widgets.LocalToaster
+import me.him188.ani.app.ui.foundation.widgets.showLoadError
 import me.him188.ani.app.ui.lang.Lang
 import me.him188.ani.app.ui.lang.exploration_continue_watching
 import me.him188.ani.app.ui.lang.exploration_horizontal_scroll_tip
 import me.him188.ani.app.ui.lang.exploration_recommendations
+import me.him188.ani.app.ui.lang.exploration_refresh_recommendations
 import me.him188.ani.app.ui.lang.exploration_schedule
 import me.him188.ani.app.ui.lang.exploration_search
 import me.him188.ani.app.ui.lang.exploration_settings
@@ -113,6 +118,7 @@ import me.him188.ani.app.ui.search.isLoadingFirstPageOrRefreshing
 import me.him188.ani.app.ui.search.rememberLoadErrorState
 import me.him188.ani.app.ui.user.SelfInfoUiState
 import me.him188.ani.app.ui.user.TestSelfInfoUiState
+import me.him188.ani.datasources.api.topic.UnifiedCollectionType
 import me.him188.ani.utils.analytics.Analytics
 import me.him188.ani.utils.analytics.AnalyticsEvent.Companion.SubjectEnter
 import me.him188.ani.utils.analytics.recordEvent
@@ -131,6 +137,7 @@ class ExplorationPageState(
     val recommendationPager: Flow<PagingData<RecommendedItemInfo>>,
     val horizontalScrollTipFlow: Flow<Boolean>,
     private val onSetDisableHorizontalScrollTip: () -> Unit,
+    val onSetCollectionType: suspend (Int, UnifiedCollectionType) -> LoadError? = { _, _ -> null },
 ) {
     val trendingSubjectsCarouselState = CarouselState(
         itemCount = {
@@ -170,6 +177,7 @@ fun ExplorationScreen(
     actions: @Composable () -> Unit = {},
     windowInsets: WindowInsets = AniWindowInsets.forPageContent(),
 ) {
+    val recommendationPager = state.recommendationPager.collectAsLazyPagingItemsWithLifecycle()
     val isHeightAtLeastMedium = currentWindowAdaptiveInfo1().windowSizeClass.isHeightAtLeastMedium
     val scrollBehavior = if (LocalPlatform.current.hasScrollingBug() || isHeightAtLeastMedium) {
         TopAppBarDefaults.pinnedScrollBehavior()
@@ -186,6 +194,16 @@ fun ExplorationScreen(
                 Modifier.fillMaxWidth(),
                 actions = {
                     actions()
+                    IconButton(
+                        onClick = recommendationPager::refresh,
+                        enabled = !recommendationPager.isLoadingFirstPageOrRefreshing,
+                    ) {
+                        if (recommendationPager.isLoadingFirstPageOrRefreshing) {
+                            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Rounded.Refresh, stringResource(Lang.exploration_refresh_recommendations))
+                        }
+                    }
                     if (selfInfo.isSessionValid == false // #1269 游客模式下无法打开设置界面
                         || currentWindowAdaptiveInfo1().windowSizeClass.isWidthAtLeastMedium
                     ) {
@@ -228,7 +246,6 @@ fun ExplorationScreen(
         val scope = rememberCoroutineScope()
         val horizontalScrollTip = stringResource(Lang.exploration_horizontal_scroll_tip)
 
-        val recommendationPager = state.recommendationPager.collectAsLazyPagingItemsWithLifecycle()
         val recommendationPagerLoadError by recommendationPager.rememberLoadErrorState()
         val aniMotionScheme = LocalAniMotionScheme.current
         val layoutParams = RecommendationDefaults.layoutParameters()
@@ -396,6 +413,11 @@ fun ExplorationScreen(
                     }
                 },
                 layoutParams,
+                onSetCollectionType = { info, type ->
+                    scope.launch {
+                        state.onSetCollectionType(info.bangumiId, type)?.let(toaster::showLoadError)
+                    }
+                },
             )
         }
     }

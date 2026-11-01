@@ -41,12 +41,16 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.HowToReg
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +64,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -75,6 +80,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -93,8 +99,6 @@ import androidx.paging.compose.collectWithLifecycle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import me.him188.ani.app.data.models.bangumi.BangumiSyncState
@@ -103,11 +107,18 @@ import me.him188.ani.app.data.models.subject.SubjectCollectionCounts
 import me.him188.ani.app.data.models.subject.SubjectCollectionInfo
 import me.him188.ani.app.data.models.subject.toNavPlaceholder
 import me.him188.ani.app.data.repository.subject.CollectionsFilterQuery
+import me.him188.ani.app.data.repository.subject.CollectionSortOrder
+import me.him188.ani.app.domain.foundation.LoadError
+import me.him188.ani.app.ui.lang.collection_sort
+import me.him188.ani.app.ui.lang.collection_sort_default
+import me.him188.ani.app.ui.lang.collection_sort_watched_newest
+import me.him188.ani.app.ui.lang.collection_sort_watched_oldest
 import me.him188.ani.app.navigation.LocalNavigator
 import me.him188.ani.app.ui.adaptive.AniTopAppBar
 import me.him188.ani.app.ui.adaptive.AniTopAppBarDefaults
 import me.him188.ani.app.ui.foundation.LocalPlatform
 import me.him188.ani.app.ui.foundation.ifThen
+import me.him188.ani.app.ui.foundation.stateOf
 import me.him188.ani.app.ui.foundation.input.touchHorizontalScrollOnly
 import me.him188.ani.app.ui.foundation.layout.AniWindowInsets
 import me.him188.ani.app.ui.foundation.layout.currentWindowAdaptiveInfo1
@@ -139,6 +150,7 @@ import me.him188.ani.app.ui.lang.subject_collection_uncollected
 import me.him188.ani.app.ui.lang.subject_collection_wish
 import me.him188.ani.app.ui.search.isLoadingFirstPageOrRefreshing
 import me.him188.ani.app.ui.subject.collection.components.EditableSubjectCollectionTypeState
+import me.him188.ani.app.ui.subject.collection.components.WatchedDateDialog
 import me.him188.ani.app.ui.subject.collection.progress.SubjectProgressButton
 import me.him188.ani.app.ui.subject.collection.progress.SubjectProgressStateFactory
 import me.him188.ani.app.ui.subject.collection.progress.rememberSubjectProgressState
@@ -176,8 +188,19 @@ class UserCollectionsState(
     defaultQuery: CollectionsFilterQuery = CollectionsFilterQuery(
         type = UnifiedCollectionType.DOING,
     ),
+    watchedDatesState: State<Map<Int, String>> = stateOf(emptyMap()),
+    val onSetWatchedDate: suspend (subjectId: Int, date: String?) -> LoadError? = { _, _ -> null },
 ) {
     private var currentQuery by mutableStateOf(defaultQuery)
+    val watchedDates by watchedDatesState
+    var sortOrder by mutableStateOf(defaultQuery.sortOrder)
+        private set
+
+    val isWatchedPage by derivedStateOf { currentQuery.type == UnifiedCollectionType.DONE }
+
+    fun selectSortOrder(value: CollectionSortOrder) {
+        sortOrder = value
+    }
 
     val selectedTypeIndex by derivedStateOf { availableTypes.indexOf(currentQuery.type) }
 
@@ -207,11 +230,16 @@ class UserCollectionsState(
     @Suppress("INVISIBLE_REFERENCE")
     fun getCollectionLazyPagingItems(typeIndex: Int): LazyPagingItems<SubjectCollectionInfo> {
         return cachedLazyPagingItems.getOrPut(typeIndex) {
-            val pagingFlow = flowOf(typeIndex)
+            val pagingFlow = snapshotFlow {
+                val type = availableTypes[typeIndex]
+                CollectionsFilterQuery(
+                    type,
+                    sortOrder = if (type == UnifiedCollectionType.DONE) sortOrder else CollectionSortOrder.DEFAULT,
+                )
+            }
                 .restartable(restarter)
-                .map { CollectionsFilterQuery(availableTypes[it]) }
                 .transformLatest { query ->
-                    // 不再发射初始加载状态，直接发射真实数据
+                    // 查询变化或手动刷新时发射对应的分页数据。
                     emitAll(startSearch(query))
                 }
                 .cachedIn(backgroundScope)
@@ -299,50 +327,65 @@ fun CollectionPage(
             )
         },
         filters = {
-            CollectionTypeScrollableTabRow(
-                selectedIndex = state.selectedTypeIndex,
-                onSelect = { index ->
-                    state.selectTypeIndex(index)
-                    scope.launch {
-                        state.pagerState.animateScrollToPage(index)
-                    }
-                },
-                Modifier.padding(horizontal = currentWindowAdaptiveInfo1().windowSizeClass.paneHorizontalPadding),
-                { type ->
-                    val size = state.collectionCounts
-                    if (size == null) {
-                        Text(
-                            text = type.displayText(),
-                            Modifier.width(IntrinsicSize.Max),
-                            softWrap = false,
-                        )
-                    } else {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+            Row(
+                Modifier.fillMaxWidth()
+                    .padding(horizontal = currentWindowAdaptiveInfo1().windowSizeClass.paneHorizontalPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CollectionTypeScrollableTabRow(
+                    selectedIndex = state.selectedTypeIndex,
+                    onSelect = { index ->
+                        state.selectTypeIndex(index)
+                        scope.launch {
+                            state.pagerState.animateScrollToPage(index)
+                        }
+                    },
+                    Modifier.weight(1f),
+                    { type ->
+                        val size = state.collectionCounts
+                        if (size == null) {
                             Text(
                                 text = type.displayText(),
+                                Modifier.width(IntrinsicSize.Max),
                                 softWrap = false,
                             )
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                contentColor = MaterialTheme.colorScheme.onSurface,
+                        } else {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    text = size.getCount(type).toString(),
-                                    modifier = Modifier
-                                        .padding(horizontal = 2.dp)
-                                        .wrapContentSize(align = Alignment.Center),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    textAlign = TextAlign.Center,
+                                    text = type.displayText(),
+                                    softWrap = false,
                                 )
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                ) {
+                                    Text(
+                                        text = size.getCount(type).toString(),
+                                        modifier = Modifier
+                                            .padding(horizontal = 2.dp)
+                                            .wrapContentSize(align = Alignment.Center),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
                             }
                         }
-                    }
-                },
-                scrollState = state.tabRowScrollState,
-            )
+                    },
+                    scrollState = state.tabRowScrollState,
+                )
+                if (state.isWatchedPage) {
+                    CollectionSortButton(
+                        state.sortOrder,
+                        onSelect = {
+                            state.selectSortOrder(it)
+                            scope.launch { state.scrollToTop() }
+                        },
+                    )
+                }
+            }
         },
         isRefreshing = { state.selectedPageRefreshing || isBangumiSyncing },
         onRefresh = { state.refreshSelectedPage() },
@@ -391,6 +434,8 @@ fun CollectionPage(
                                 { onCollectionUpdate(collection.subjectId, it) },
                                 state.subjectProgressStateFactory,
                                 editableSubjectCollectionTypeState,
+                                watchedDate = state.watchedDates[collection.subjectId],
+                                onSetWatchedDate = { state.onSetWatchedDate(collection.subjectId, it) },
                             )
                         }
                     },
@@ -408,6 +453,38 @@ fun CollectionPage(
             state = fullSyncState,
             onDismissRequest = { hideBangumiSync = true },
         )
+    }
+}
+
+/** 看过日期排序的入口，选项与列表查询共用同一状态。 */
+@Composable
+private fun CollectionSortButton(
+    order: CollectionSortOrder,
+    onSelect: (CollectionSortOrder) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null)
+            Text(stringResource(Lang.collection_sort), Modifier.padding(start = 6.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            CollectionSortOrder.entries.forEach { option ->
+                val label = when (option) {
+                    CollectionSortOrder.DEFAULT -> Lang.collection_sort_default
+                    CollectionSortOrder.WATCHED_DATE_DESC -> Lang.collection_sort_watched_newest
+                    CollectionSortOrder.WATCHED_DATE_ASC -> Lang.collection_sort_watched_oldest
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(label)) },
+                    trailingIcon = { if (order == option) Icon(Icons.Rounded.Check, null) },
+                    onClick = {
+                        expanded = false
+                        onSelect(option)
+                    },
+                )
+            }
+        }
     }
 }
 
@@ -614,8 +691,19 @@ private fun SubjectCollectionItem(
     editableSubjectCollectionTypeState: EditableSubjectCollectionTypeState,
     type: UnifiedCollectionType = subjectCollection.collectionType,
     modifier: Modifier = Modifier,
+    watchedDate: String? = null,
+    onSetWatchedDate: suspend (String?) -> LoadError? = { null },
 ) {
     var showEpisodeProgressDialog by rememberSaveable { mutableStateOf(false) }
+    var showWatchedDateDialog by rememberSaveable(subjectCollection.subjectId) { mutableStateOf(false) }
+
+    if (showWatchedDateDialog) {
+        WatchedDateDialog(
+            initialDate = watchedDate,
+            onSave = onSetWatchedDate,
+            onDismissRequest = { showWatchedDateDialog = false },
+        )
+    }
 
     // 即使对话框不显示也加载, 避免打开对话框要等待一秒才能看到进度
     val navigator = LocalNavigator.current
@@ -696,6 +784,12 @@ private fun SubjectCollectionItem(
         },
         colors = AniThemeDefaults.primaryCardColors(),
         modifier = modifier,
+        watchedDate = watchedDate.takeIf { type == UnifiedCollectionType.DONE },
+        onEditWatchedDate = if (type == UnifiedCollectionType.DONE) {
+            { showWatchedDateDialog = true }
+        } else {
+            null
+        },
     )
 }
 

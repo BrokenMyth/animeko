@@ -37,7 +37,8 @@ android {
     namespace = "me.him188.ani.android"
     compileSdk = getIntProperty("android.compile.sdk")
     defaultConfig {
-        applicationId = "me.him188.ani"
+        // 独立包名支持与官方签名的应用并存，本地签名可持续用于 fork 更新。
+        applicationId = getLocalProperty("ani.android.applicationId") ?: "me.him188.ani.brokenmyth"
         minSdk = getIntProperty("android.min.sdk")
         targetSdk = getIntProperty("android.compile.sdk")
         versionCode = getIntProperty("android.version.code")

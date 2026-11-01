@@ -34,6 +34,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.him188.ani.app.data.models.danmaku.DanmakuFilterConfig
+import me.him188.ani.app.ui.update.ForkUpdateRepository
 import me.him188.ani.app.data.models.preference.BackgroundBehavior
 import me.him188.ani.app.data.models.preference.DesktopCloseBehavior
 import me.him188.ani.app.data.models.preference.EpisodeListProgressTheme
@@ -72,6 +73,9 @@ import me.him188.ani.app.ui.lang.settings_app_list_animation
 import me.him188.ani.app.ui.lang.settings_app_list_animation_description
 import me.him188.ani.app.ui.lang.settings_app_my_collections
 import me.him188.ani.app.ui.lang.settings_app_not_show_done_and_dropped_subjects
+import me.him188.ani.app.ui.lang.settings_app_recommendations
+import me.him188.ani.app.ui.lang.settings_app_hide_collected_recommendations
+import me.him188.ani.app.ui.lang.settings_app_hide_collected_recommendations_description
 import me.him188.ani.app.ui.lang.settings_app_nsfw_blur
 import me.him188.ani.app.ui.lang.settings_app_nsfw_content
 import me.him188.ani.app.ui.lang.settings_app_nsfw_display
@@ -273,6 +277,23 @@ fun SettingsScope.AppearanceGroup(
         )
     }
 
+    Group(title = { Text(stringResource(Lang.settings_app_recommendations)) }, useThinHeader = true) {
+        SwitchItem(
+            checked = uiSettings.recommendationSettings.hideCollectedSubjects,
+            onCheckedChange = { hideCollected ->
+                state.update(
+                    uiSettings.copy(
+                        recommendationSettings = uiSettings.recommendationSettings.copy(
+                            hideCollectedSubjects = hideCollected,
+                        ),
+                    ),
+                )
+            },
+            title = { Text(stringResource(Lang.settings_app_hide_collected_recommendations)) },
+            description = { Text(stringResource(Lang.settings_app_hide_collected_recommendations_description)) },
+        )
+    }
+
     Group(title = { Text(stringResource(Lang.settings_app_search)) }, useThinHeader = true) {
         SwitchItem(
             checked = uiSettings.searchSettings.ignoreDoneAndDroppedSubjects,
@@ -391,7 +412,7 @@ fun SettingsScope.SoftwareUpdateGroup(
         RowButtonItem(
             onClick = {
                 uriHandler.openUri(
-                    "https://github.com/open-ani/ani/releases/tag/v${currentAniBuildConfig.versionName}",
+                    ForkUpdateRepository.releaseUrl(currentAniBuildConfig.versionName),
                 )
             },
             icon = { Icon(Icons.Rounded.ArrowOutward, null) },

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import me.him188.ani.app.data.models.bangumi.BangumiSyncState
@@ -25,7 +26,9 @@ import me.him188.ani.app.data.repository.episode.AnimeScheduleRepository
 import me.him188.ani.app.data.repository.episode.EpisodeCollectionRepository
 import me.him188.ani.app.data.repository.episode.EpisodeProgressRepository
 import me.him188.ani.app.data.repository.subject.SetSubjectCollectionTypeOrDeleteUseCase
+import me.him188.ani.app.data.repository.subject.CollectionSortOrder
 import me.him188.ani.app.data.repository.subject.SubjectCollectionRepository
+import me.him188.ani.app.data.repository.subject.WatchedDateRepository
 import me.him188.ani.app.data.repository.user.SettingsRepository
 import me.him188.ani.app.domain.foundation.LoadError
 import me.him188.ani.app.domain.session.SessionEvent
@@ -56,6 +59,7 @@ open class UserCollectionsViewModel : AbstractViewModel(), KoinComponent {
     private val settingsRepository: SettingsRepository by inject()
     private val sessionStateProvider: SessionStateProvider by inject()
     private val setSubjectCollectionTypeOrDeleteUseCase: SetSubjectCollectionTypeOrDeleteUseCase by inject()
+    private val watchedDateRepository: WatchedDateRepository by inject()
 
     val lazyGridState = LazyGridState()
 
@@ -76,13 +80,25 @@ open class UserCollectionsViewModel : AbstractViewModel(), KoinComponent {
     private val countsRestarter = FlowRestarter()
 
     val state = UserCollectionsState(
-        startSearch = { subjectCollectionRepository.subjectCollectionsPager(it) },
+        startSearch = { query ->
+            if (query.type == UnifiedCollectionType.DONE && query.sortOrder != CollectionSortOrder.DEFAULT) {
+                watchedDateRepository.datesFlow.flatMapLatest { dates ->
+                    subjectCollectionRepository.subjectCollectionsPager(query.copy(watchedDates = dates))
+                }
+            } else {
+                subjectCollectionRepository.subjectCollectionsPager(query)
+            }
+        },
         collectionCountsState = subjectCollectionRepository.subjectCollectionCountsFlow()
             .restartable(countsRestarter)
             .produceState(null),
         subjectProgressStateFactory,
         createEditableSubjectCollectionTypeState = { createEditableSubjectCollectionTypeState(it) },
         backgroundScope,
+        watchedDatesState = watchedDateRepository.datesFlow.produceState(emptyMap()),
+        onSetWatchedDate = { subjectId, date ->
+            LoadError.runAndWrapOrThrowCancellation { watchedDateRepository.setDate(subjectId, date) }
+        },
     )
 
     // 必须用 Kotlin init 块而不是 AbstractViewModel.init(): 后者只在实例被 compose remember 时 (onRemembered) 调用,

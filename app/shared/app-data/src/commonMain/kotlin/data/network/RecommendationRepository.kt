@@ -16,6 +16,8 @@ import androidx.paging.PagingState
 import io.ktor.client.call.body
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.him188.ani.app.data.models.recommend.RecommendedItemInfo
 import me.him188.ani.app.data.models.recommend.RecommendedSubjectInfo
@@ -30,35 +32,68 @@ import kotlin.coroutines.CoroutineContext
 
 class RecommendationRepository(
     private val homeApi: ApiInvoker<HomeAniApi>,
+    private val collectionFilter: RecommendationCollectionFilter,
     private val ioDispatcher: CoroutineContext = Dispatchers.IO_
 ) : Repository() {
     fun recommendedSubjectsPager(): Flow<PagingData<RecommendedItemInfo>> {
+        // 收藏状态按每轮推荐读取快照，当前卡片在用户主动刷新前保持稳定。
         return Pager(defaultPagingConfig, initialKey = 0) {
             HomeRecommendationPagingSource()
         }.flow
     }
 
     private inner class HomeRecommendationPagingSource : PagingSource<Int, RecommendedItemInfo>() {
-        override fun getRefreshKey(state: PagingState<Int, RecommendedItemInfo>): Int? = state.anchorPosition
+        private val filterMutex = Mutex()
+        private var excludedIds: Set<Int>? = null
+
+        override fun getRefreshKey(state: PagingState<Int, RecommendedItemInfo>): Int =
+            state.pages.lastOrNull()?.nextKey ?: 0
+
+        private suspend fun excludedSubjectIds(): Set<Int> = filterMutex.withLock {
+            excludedIds ?: collectionFilter.excludedSubjectIds().also { excludedIds = it }
+        }
 
         override suspend fun load(params: LoadParams<Int>): LoadResult<Int, RecommendedItemInfo> {
-            val offset = params.key ?: 0
+            val initialOffset = params.key ?: 0
             val loadSize = params.loadSize
-            return runWrappingExceptionAsLoadResult {
-                val response = withContext(ioDispatcher) {
-                    homeApi {
-                        getHomeRecommendations(
-                            offset = offset,
-                            limit = loadSize,
-                        ).body()
+            return runWrappingExceptionAsLoadResult<Int, RecommendedItemInfo> {
+                val excludedIds = excludedSubjectIds()
+                var offset = initialOffset
+                var nextOffset: Int?
+                var list: List<RecommendedItemInfo>
+                var canWrap = params is LoadParams.Refresh && initialOffset > 0
+                do {
+                    val response = withContext(ioDispatcher) {
+                        homeApi {
+                            getHomeRecommendations(
+                                offset = offset,
+                                limit = loadSize,
+                            ).body()
+                        }
                     }
-                }
-                val list: List<RecommendedItemInfo> = response.items.mapNotNull { it.toRecommendedSubjectInfo() }
+                    list = response.items.mapNotNull {
+                        it.toRecommendedSubjectInfo()?.takeUnless { subject -> subject.bangumiId in excludedIds }
+                    }
+                    // 分页偏移基于服务器返回的数量, 与过滤后可见条目的数量无关.
+                    nextOffset = if (response.items.isEmpty() || offset + response.items.size >= response.total) {
+                        null
+                    } else {
+                        offset + response.items.size
+                    }
+                    // 空白页没有可见条目触发 Compose 继续加载, 由当前请求跨过被完全过滤的页.
+                    if (list.isEmpty() && nextOffset == null && canWrap) {
+                        // 新批次末尾没有可见条目时最多回到开头一次，追加加载不回绕。
+                        nextOffset = 0
+                        canWrap = false
+                    }
+                    nextOffset?.let { offset = it }
+                } while (list.isEmpty() && nextOffset != null)
 
-                LoadResult.Page(
-                    list,
-                    prevKey = if (offset == 0) null else (offset - loadSize).coerceAtLeast(0),
-                    nextKey = if (offset + list.size >= response.total) null else offset + loadSize,
+                LoadResult.Page<Int, RecommendedItemInfo>(
+                    list.shuffled(),
+                    // 每轮推荐只向后加载，避免从非零起点自动前置上一批条目。
+                    prevKey = null,
+                    nextKey = nextOffset,
                 )
             }.also {
                 if (it is LoadResult.Error) {

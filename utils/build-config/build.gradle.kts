@@ -12,6 +12,8 @@ plugins {
 }
 
 val defaultDistroChannel = getPropertyOrNull("ani.distro.channel") ?: "default"
+val appApplicationId = getLocalProperty("ani.android.applicationId") ?: "me.him188.ani.brokenmyth"
+val debugApplicationIdSuffix = getLocalProperty("ani.android.debug.applicationIdSuffix") ?: ".debug2"
 
 fun javaStringLiteral(value: String): String =
     "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
@@ -27,11 +29,11 @@ android {
 
     buildTypes {
         release {
-            buildConfigField("String", "APP_APPLICATION_ID", "\"${idGroup}\"")
+            buildConfigField("String", "APP_APPLICATION_ID", javaStringLiteral(appApplicationId))
         }
 
         debug {
-            buildConfigField("String", "APP_APPLICATION_ID", "\"${idGroup}.debug2\"")
+            buildConfigField("String", "APP_APPLICATION_ID", javaStringLiteral(appApplicationId + debugApplicationIdSuffix))
         }
     }
 
