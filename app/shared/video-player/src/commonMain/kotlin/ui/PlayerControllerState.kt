@@ -169,6 +169,9 @@ class PlayerControllerState(
     internal val keyboard = PlayerKeyboardState()
 
     private var fullVisible by mutableStateOf(initialVisibility == ControllerVisibility.Visible)
+    var isManuallyHidden by mutableStateOf(false)
+        private set
+    private var hiddenAtWindowReentryCount = 0
     private val hasProgressBarRequester by derivedStateOf { progressBarRequesters.isNotEmpty() }
     private val hasInlineProgressSliderRequester by derivedStateOf {
         inlineProgressSliderRequesters.isNotEmpty()
@@ -180,8 +183,7 @@ class PlayerControllerState(
     val visibility: ControllerVisibility by derivedStateOf {
         // 根据 hasProgressBarRequester, alwaysOn 和 fullVisible 计算正确的 `ControllerVisibility`
         if (hasInlineProgressSliderRequester) return@derivedStateOf ControllerVisibility.InlineSliderOnly
-        if (alwaysOn) return@derivedStateOf ControllerVisibility.Visible
-        if (fullVisible) return@derivedStateOf ControllerVisibility.Visible
+        if (!isManuallyHidden && (alwaysOn || fullVisible)) return@derivedStateOf ControllerVisibility.Visible
         if (hasProgressBarRequester) return@derivedStateOf ControllerVisibility.DetachedSliderOnly
         ControllerVisibility.Invisible
     }
@@ -200,7 +202,24 @@ class PlayerControllerState(
     }
 
     val setFullVisible: (visible: Boolean) -> Unit = {
-        fullVisible = it
+        toggleFullVisible(it)
+    }
+
+    /**
+     * 主动收起控制栏，并锁定到鼠标离开整个窗口后重新进入。
+     * 记录点击时的窗口重入次数，窗口内移动和常显请求都不能解除锁定；请求仍由原持有方清理。
+     */
+    fun hideControls(windowReentryCount: Int) {
+        hiddenAtWindowReentryCount = windowReentryCount
+        isManuallyHidden = true
+        fullVisible = false
+    }
+
+    /** 仅接受主动隐藏之后发生的窗口重入；返回 true 时由调用方恢复显示及自动收起计时。 */
+    internal fun restoreControlsOnWindowReentry(windowReentryCount: Int): Boolean {
+        if (!isManuallyHidden || windowReentryCount == hiddenAtWindowReentryCount) return false
+        isManuallyHidden = false
+        return true
     }
 
     private val alwaysOnRequests = SnapshotStateList<Any>()

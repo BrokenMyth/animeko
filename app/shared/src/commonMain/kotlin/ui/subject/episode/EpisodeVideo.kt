@@ -31,6 +31,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -92,6 +93,7 @@ import me.him188.ani.app.ui.foundation.icons.RightPanelOpen
 import me.him188.ani.app.ui.foundation.icons.SubtitleGear
 import me.him188.ani.app.ui.foundation.ifThen
 import me.him188.ani.app.ui.foundation.input.LocalActiveInputSource
+import me.him188.ani.app.ui.foundation.input.LocalWindowPointerState
 import me.him188.ani.app.ui.foundation.interaction.WindowDragArea
 import me.him188.ani.app.ui.foundation.layout.currentWindowAdaptiveInfo1
 import me.him188.ani.app.ui.foundation.rememberDebugSettingsViewModel
@@ -704,6 +706,7 @@ private fun EpisodeVideoTopBarActions(
     var showMoreDropdown by rememberSaveable { mutableStateOf(false) }
     var showVideoEnhancementDropdown by rememberSaveable { mutableStateOf(false) }
     var showAspectRatioDropdown by rememberSaveable { mutableStateOf(false) }
+    val windowPointerState = LocalWindowPointerState.current
 
     val dropdownAlwaysOnRequester = rememberAlwaysOnRequester(playerControllerState, "topBarExternalActions")
     val isExternalDropdownVisible =
@@ -733,6 +736,22 @@ private fun EpisodeVideoTopBarActions(
         onDispose {
             if (isExternalDropdownVisible) {
                 dropdownAlwaysOnRequester.cancelRequest()
+            }
+        }
+    }
+
+    if (LocalPlatform.current.isDesktop()) {
+        val hideControlsText = "Hide controls"
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+            tooltip = { PlainTooltip { Text(hideControlsText) } },
+            state = rememberTooltipState(),
+        ) {
+            IconButton(
+                onClick = { playerControllerState.hideControls(windowPointerState?.reentryCount ?: 0) },
+                modifier = Modifier.testTag("HidePlayerControls"),
+            ) {
+                Icon(Icons.Rounded.VisibilityOff, contentDescription = hideControlsText)
             }
         }
     }

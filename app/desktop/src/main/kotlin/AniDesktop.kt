@@ -96,6 +96,7 @@ import me.him188.ani.app.ui.foundation.LocalPlatform
 import me.him188.ani.app.ui.foundation.LocalWindowState
 import me.him188.ani.app.ui.foundation.WindowDropHost
 import me.him188.ani.app.ui.foundation.input.ProvideTouchViewConfiguration
+import me.him188.ani.app.ui.foundation.input.WindowPointerBoundary
 import me.him188.ani.app.ui.foundation.effects.OverrideCaptionButtonAppearance
 import me.him188.ani.app.ui.foundation.ifThen
 import me.him188.ani.app.ui.foundation.layout.LocalAppWindowVisible
@@ -608,35 +609,37 @@ object AniDesktop {
                         }
                     },
                 ) {
-                    if (isRunningUnderWine()) {
-                        ProvideTouchViewConfiguration {
-                            MainWindowContent(navigator, settingsRepository)
-                        }
-                    } else {
-                        HandleWindowsWindowProc()
-                        if (platform.isWindows()) {
-                            val platformWindow = LocalPlatformWindow.current
-                            LaunchedEffect(platformWindow, trayState) {
-                                WindowsWindowUtils.instance.windowIsActive(platformWindow)
-                                    .filter { it == true }
-                                    .collect {
-                                        if (trayState.isWindowHiddenToTray) {
-                                            trayState.restoreWindow()
-                                        }
-                                    }
-                            }
-                        }
-                        WindowFrame(
-                            windowState = windowState,
-                            onCloseRequest = {
-                                trayState.handleCloseRequest(
-                                    closeBehavior = uiSettings.desktopCloseBehavior,
-                                    onExit = exitApplicationSavingWindowState,
-                                )
-                            },
-                        ) {
+                    WindowPointerBoundary {
+                        if (isRunningUnderWine()) {
                             ProvideTouchViewConfiguration {
                                 MainWindowContent(navigator, settingsRepository)
+                            }
+                        } else {
+                            HandleWindowsWindowProc()
+                            if (platform.isWindows()) {
+                                val platformWindow = LocalPlatformWindow.current
+                                LaunchedEffect(platformWindow, trayState) {
+                                    WindowsWindowUtils.instance.windowIsActive(platformWindow)
+                                        .filter { it == true }
+                                        .collect {
+                                            if (trayState.isWindowHiddenToTray) {
+                                                trayState.restoreWindow()
+                                            }
+                                        }
+                                }
+                            }
+                            WindowFrame(
+                                windowState = windowState,
+                                onCloseRequest = {
+                                    trayState.handleCloseRequest(
+                                        closeBehavior = uiSettings.desktopCloseBehavior,
+                                        onExit = exitApplicationSavingWindowState,
+                                    )
+                                },
+                            ) {
+                                ProvideTouchViewConfiguration {
+                                    MainWindowContent(navigator, settingsRepository)
+                                }
                             }
                         }
                     }

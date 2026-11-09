@@ -87,6 +87,7 @@ import me.him188.ani.app.ui.foundation.effects.onPointerEventMultiplatform
 import me.him188.ani.app.ui.foundation.ifNotNullThen
 import me.him188.ani.app.ui.foundation.ifThen
 import me.him188.ani.app.ui.foundation.input.LocalActiveInputSource
+import me.him188.ani.app.ui.foundation.input.LocalWindowPointerState
 import me.him188.ani.app.ui.foundation.input.asGesturePointerType
 import me.him188.ani.app.ui.foundation.input.trackActiveInputSource
 import me.him188.ani.app.ui.lang.Lang
@@ -466,8 +467,8 @@ fun hasPointerDevice(platform: Platform, hasSeenMouse: Boolean): Boolean =
  * 一套点击/双击约定. 滑动类手势的挂载也由它决定 (见 [PlayerGestureHost] 中的 swipeGesturesEnabled):
  * 拖动必须靠 enabled 门控, 不能在事件里按指针类型消费位移, 否则会取消同一区域的点击判定.
  *
- * 长按不走 family, 而是按本次手势 down 事件的 [PointerType] 过滤 (见 [longPressFastSkip]) ——
- * 它不消费任何事件, 因此不会干扰点击, 也就不需要等 family 提交.
+ * 长按由本次 down 事件识别，触摸和桌面鼠标左键均可触发 (见 [longPressFastSkip])。
+ * 超过长按阈值后消费事件以取消普通点击，不依赖 family 的重组提交。
  */
 @Immutable
 enum class GestureFamily(
@@ -594,6 +595,7 @@ fun PlayerGestureHost(
     val isFullscreen = fullscreenState.isFullscreen
 
     val inputSourceState = LocalActiveInputSource.current
+    val platform = LocalPlatform.current
 
     // 滑动类手势只属于触摸约定, 用组合期的 [family] 门控挂载, 而不是在事件里按指针类型消费位移:
     // 消费会让 combinedClickable 的点击判定被取消, 鼠标按下后漂移一个像素就点不动播放器.
@@ -621,7 +623,7 @@ fun PlayerGestureHost(
         val audioLevelController = playerState.features[AudioLevelController]
         // 平台问题而非输入方式问题: 桌面没有系统级 AudioManager, 音量由 mediamp 提供.
         // 用 GestureFamily 判断会让混合设备上键盘音量键的作用目标随输入方式跳变.
-        val useMediaAudioController = LocalPlatform.current.isDesktop()
+        val useMediaAudioController = platform.isDesktop()
         val playerFocusState = controllerState.focusState
 
         val keyboardHandler = rememberPlayerKeyboardShortcuts(
@@ -696,7 +698,7 @@ fun PlayerGestureHost(
 
         // 与上面的 Move handler 配套. 同样用「这台设备有没有鼠标」而不是「此刻在用鼠标」:
         // 后者会让隐藏时序随输入方式跳变, 手指点一下就把鼠标模式下的自动隐藏关掉.
-        if (hasPointerDevice(LocalPlatform.current, inputSourceState.hasSeenMouse)) {
+        if (hasPointerDevice(platform, inputSourceState.hasSeenMouse)) {
             // 没有人请求 alwaysOn 时自动隐藏控制器
             LaunchedEffect(controllerState) {
                 snapshotFlow { controllerState.alwaysOn }.collectLatest { alwaysOn ->
@@ -745,6 +747,25 @@ fun PlayerGestureHost(
                 )
 
         val mouseMoveTasker = rememberUiMonoTasker()
+        val windowPointerState = LocalWindowPointerState.current
+        val windowReentryCount = windowPointerState?.reentryCount
+
+        fun showMouseControls() {
+            controllerState.toggleFullVisible(true)
+            mouseMoveTasker.launch {
+                delay(VIDEO_GESTURE_MOUSE_MOVE_SHOW_CONTROLLER_DURATION)
+                controllerState.toggleFullVisible(false)
+            }
+        }
+
+        LaunchedEffect(controllerState, windowPointerState, windowReentryCount) {
+            // 使用窗口当前次数，隐藏点击与重入同帧发生时也以点击时记录的基准判定。
+            val currentReentryCount = windowPointerState?.reentryCount
+            if (currentReentryCount != null && controllerState.restoreControlsOnWindowReentry(currentReentryCount)) {
+                showMouseControls()
+            }
+        }
+
         Box(
             keyboardModifier
                 .combineClickableWithFamilyGesture()
@@ -775,12 +796,8 @@ fun PlayerGestureHost(
                 // 始终挂载, 再按本次事件过滤. 否则触摸后的第一次 Mouse Move 只会切换 family,
                 // 要等第二次 Move 才能显示控制器.
                 .onPointerEventMultiplatform(PointerEventType.Move) { event ->
-                    if (event.changes.firstOrNull()?.type == PointerType.Mouse) {
-                        controllerState.toggleFullVisible(true)
-                        mouseMoveTasker.launch {
-                            delay(VIDEO_GESTURE_MOUSE_MOVE_SHOW_CONTROLLER_DURATION)
-                            controllerState.toggleFullVisible(false)
-                        }
+                    if (event.changes.firstOrNull()?.type == PointerType.Mouse && !controllerState.isManuallyHidden) {
+                        showMouseControls()
                     }
                 }
                 // 滚轮只可能来自鼠标, 无需 family 门控; 接了鼠标的 Android 平板同样受益
@@ -810,9 +827,13 @@ fun PlayerGestureHost(
                 // 桌面上是零 inset, 无条件挂载可避免混合设备上随 family 增删 padding 造成布局跳变
                 Modifier.matchParentSize()
                     .systemGesturesPadding()
-                    // 由 down 事件的类型过滤而非 family 门控: 按下不提交 family, 门控会漏掉每次长按
+                    // 桌面允许触摸和鼠标左键长按，其他平台保持触摸约定；不依赖 family 的提交时机。
                     .ifNotNullThen(fastSkipState) {
-                        longPressFastSkip(it, SkipDirection.FORWARD, requiredPointerType = PointerType.Touch)
+                        longPressFastSkip(
+                            it,
+                            SkipDirection.FORWARD,
+                            requiredPointerType = if (platform.isDesktop()) null else PointerType.Touch,
+                        )
                     },
             ) {
                 Box(

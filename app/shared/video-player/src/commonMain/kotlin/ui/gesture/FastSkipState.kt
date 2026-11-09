@@ -18,7 +18,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -90,15 +92,15 @@ enum class SkipDirection {
 
 /**
  * @param requiredPointerType 不为 null 时只响应同一手势约定的指针; Stylus/Eraser 视为 Touch.
- * 用于让长按快进只属于触摸而不影响鼠标长按.
+ * 鼠标只响应左键。播放器、快进速度或指针约定变化时，取消当前手势并恢复原播放速度。
  */
 fun Modifier.longPressFastSkip(
     state: FastSkipState,
     direction: SkipDirection,
     requiredPointerType: PointerType? = null,
-): Modifier {
+): Modifier = pointerInput(state, direction, requiredPointerType) {
     var ticket = 0
-    return detectLongPressGesture(
+    detectLongPressGesture(
         onStart = {
             ticket = state.startSkipping(direction)
         },
@@ -108,29 +110,17 @@ fun Modifier.longPressFastSkip(
         requiredPointerType = requiredPointerType,
     )
 }
-//    pointerInput(Unit) {
-//    detectLongPressGesture()
-////    detectTapGestures(
-////        onPress = {
-////            val ticket = state.startSkipping(direction)
-////            awaitPointerEventScope {
-////                var event = awaitPointerEvent()
-////                while (event.changes.any { it.pressed }) {
-////                    event = awaitPointerEvent()
-////                }
-////
-////                state.stopSkipping(ticket)
-////            }
-////        }
-////    )
-//}
 
-fun Modifier.detectLongPressGesture(
+/**
+ * 按住超过阈值才启动快进，触发前保留普通点击和双击的事件处理，移动超过拖动阈值则取消等待。
+ * 长按生效后消费后续事件和抬起事件，避免松开鼠标时额外切换暂停；手势取消同样执行恢复。
+ */
+private suspend fun PointerInputScope.detectLongPressGesture(
     onStart: () -> Unit,
     onEnd: () -> Unit,
     longPressTimeout: Long = 500L,
     requiredPointerType: PointerType? = null,
-): Modifier = pointerInput(requiredPointerType) {
+) {
     coroutineScope {
         val touchSlop = viewConfiguration.touchSlop
 
@@ -141,6 +131,9 @@ fun Modifier.detectLongPressGesture(
                 requiredPointerType != null &&
                 down.type.asGesturePointerType() != requiredPointerType.asGesturePointerType()
             ) {
+                return@awaitEachGesture
+            }
+            if (down.type == PointerType.Mouse && !currentEvent.buttons.isPrimaryPressed) {
                 return@awaitEachGesture
             }
             val initialPosition = down.position
